@@ -24,10 +24,10 @@ fs.mkdirSync(uploadsDir, { recursive: true });
 
 const app = Fastify({ logger: true, bodyLimit: 30 * 1024 * 1024 });
 
-await app.register(cors, { origin: true });
-await app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024, files: 1 } });
-await app.register(fastifyStatic, { root: publicDir, prefix: "/" });
-await app.register(fastifyStatic, { root: uploadsDir, prefix: "/uploads/", decorateReply: false });
+app.register(cors, { origin: true });
+app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024, files: 1 } });
+app.register(fastifyStatic, { root: publicDir, prefix: "/" });
+app.register(fastifyStatic, { root: uploadsDir, prefix: "/uploads/", decorateReply: false });
 
 const sessions = globalThis.__smartDisplaySessions || new Map();
 globalThis.__smartDisplaySessions = sessions;
@@ -69,8 +69,6 @@ app.get("/api/session/:sessionId/qr", async (request, reply) => {
   const qrDataUrl = await QRCode.toDataURL(pairingUrl, { width: 460, margin: 1, errorCorrectionLevel: "M", color: { dark: "#050505", light: "#ffffff" } });
   return { ok: true, sessionId, pairingUrl, qrDataUrl };
 });
-
-await app.ready();
 
 const io = globalThis.__smartDisplayIo || new SocketIOServer(app.server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
