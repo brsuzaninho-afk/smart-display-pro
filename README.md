@@ -2,6 +2,8 @@
 
 Sistema de sinalização digital para TV com controle remoto pelo smartphone.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/brsuzaninho-afk/smart-display-pro)
+
 ## Como funciona
 
 1. Abra `/tv.html` na TV.
