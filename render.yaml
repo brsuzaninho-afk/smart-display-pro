@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: smart-display-pro
+    runtime: node
+    plan: starter
+    region: ohio
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: HOST
+        value: 0.0.0.0
+      - key: UPLOADS_DIR
+        value: /var/data/uploads
+    disk:
+      name: smart-display-uploads
+      mountPath: /var/data
+      sizeGB: 1
