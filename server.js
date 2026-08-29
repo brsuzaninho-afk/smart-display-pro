@@ -22,77 +22,30 @@ const uploadsDir = process.env.UPLOADS_DIR
 
 fs.mkdirSync(uploadsDir, { recursive: true });
 
-const app = Fastify({
-  logger: true,
-  bodyLimit: 30 * 1024 * 1024
-});
+const app = Fastify({ logger: true, bodyLimit: 30 * 1024 * 1024 });
 
 await app.register(cors, { origin: true });
-await app.register(multipart, {
-  limits: {
-    fileSize: 200 * 1024 * 1024,
-    files: 1
-  }
-});
-
-await app.register(fastifyStatic, {
-  root: publicDir,
-  prefix: "/"
-});
-
-// Vercel Functions only allow runtime writes under /tmp. The second static
-// mount is still useful for the current warm instance; persistent media
-// storage can be swapped to object storage later without changing the UI.
-await app.register(fastifyStatic, {
-  root: uploadsDir,
-  prefix: "/uploads/",
-  decorateReply: false
-});
+await app.register(multipart, { limits: { fileSize: 200 * 1024 * 1024, files: 1 } });
+await app.register(fastifyStatic, { root: publicDir, prefix: "/" });
+await app.register(fastifyStatic, { root: uploadsDir, prefix: "/uploads/", decorateReply: false });
 
 const sessions = globalThis.__smartDisplaySessions || new Map();
 globalThis.__smartDisplaySessions = sessions;
 
-const emptyContent = () => ({
-  title: "",
-  subtitle: "",
-  price: "",
-  oldPrice: "",
-  badge: "OFERTA IMPERDÍVEL",
-  discount: "",
-  accent: "lime"
-});
+const emptyContent = () => ({ title: "", subtitle: "", price: "", oldPrice: "", badge: "OFERTA IMPERDÍVEL", discount: "", accent: "lime" });
 
 function getBaseUrl(request) {
-  const forwardedProto = request.headers["x-forwarded-proto"];
-  const proto = forwardedProto || request.protocol || "http";
-  const forwardedHost = request.headers["x-forwarded-host"];
-  const host = forwardedHost || request.headers.host;
+  const proto = request.headers["x-forwarded-proto"] || request.protocol || "https";
+  const host = request.headers["x-forwarded-host"] || request.headers.host;
   return `${proto}://${host}`;
 }
 
 function makeSession(sessionId) {
-  return {
-    id: sessionId,
-    tvSocketId: null,
-    controllerSocketId: null,
-    connected: { tv: false, controller: false },
-    mode: "photo-motion",
-    media: null,
-    content: emptyContent(),
-    createdAt: Date.now(),
-    updatedAt: Date.now()
-  };
+  return { id: sessionId, tvSocketId: null, controllerSocketId: null, connected: { tv: false, controller: false }, mode: "photo-motion", media: null, content: emptyContent(), createdAt: Date.now(), updatedAt: Date.now() };
 }
 
 function publicState(session) {
-  return {
-    id: session.id,
-    connected: session.connected,
-    mode: session.mode,
-    media: session.media,
-    content: session.content,
-    updatedAt: session.updatedAt
-  };
+  return { id: session.id, connected: session.connected, mode: session.mode, media: session.media, content: session.content, updatedAt: session.updatedAt };
 }
 
 function isSessionMember(session, socketId) {
@@ -100,17 +53,10 @@ function isSessionMember(session, socketId) {
 }
 
 app.get("/", async (_request, reply) => reply.redirect("/tv.html"));
-
-app.get("/health", async () => ({
-  ok: true,
-  platform: isVercel ? "vercel" : "node",
-  sessions: sessions.size,
-  time: new Date().toISOString()
-}));
+app.get("/health", async () => ({ ok: true, platform: isVercel ? "vercel" : "node", sessions: sessions.size, time: new Date().toISOString() }));
 
 app.get("/api/session/:sessionId", async (request, reply) => {
-  const { sessionId } = request.params;
-  const session = sessions.get(sessionId);
+  const session = sessions.get(request.params.sessionId);
   if (!session) return reply.code(404).send({ ok: false, error: "Sessão não encontrada." });
   return { ok: true, session: publicState(session) };
 });
@@ -119,52 +65,9 @@ app.get("/api/session/:sessionId/qr", async (request, reply) => {
   const { sessionId } = request.params;
   const session = sessions.get(sessionId);
   if (!session) return reply.code(404).send({ ok: false, error: "Sessão não encontrada." });
-
   const pairingUrl = `${getBaseUrl(request)}/control.html?session=${encodeURIComponent(sessionId)}`;
-  const qrDataUrl = await QRCode.toDataURL(pairingUrl, {
-    width: 460,
-    margin: 1,
-    errorCorrectionLevel: "M",
-    color: { dark: "#050505", light: "#ffffff" }
-  });
+  const qrDataUrl = await QRCode.toDataURL(pairingUrl, { width: 460, margin: 1, errorCorrectionLevel: "M", color: { dark: "#050505", light: "#ffffff" } });
   return { ok: true, sessionId, pairingUrl, qrDataUrl };
-});
-
-app.post("/api/upload", async (request, reply) => {
-  const sessionId = String(request.query?.session || "").trim();
-  if (!sessionId) return reply.code(400).send({ ok: false, error: "session é obrigatório." });
-
-  const session = sessions.get(sessionId);
-  if (!session) return reply.code(404).send({ ok: false, error: "Sessão não encontrada." });
-
-  const part = await request.file();
-  if (!part) return reply.code(400).send({ ok: false, error: "Nenhum arquivo enviado." });
-
-  const allowed = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm"]);
-  if (!allowed.has(part.mimetype)) {
-    return reply.code(415).send({ ok: false, error: "Formato não suportado. Use JPG, PNG, WEBP, GIF, MP4 ou WEBM." });
-  }
-
-  const extFromName = path.extname(part.filename || "").toLowerCase();
-  const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".webm"].includes(extFromName)
-    ? extFromName
-    : part.mimetype.startsWith("video/") ? ".mp4" : ".jpg";
-
-  const fileName = `${Date.now()}-${nanoid(10)}${safeExt}`;
-  const destination = path.join(uploadsDir, fileName);
-  await pipeline(part.file, fs.createWriteStream(destination));
-
-  const media = {
-    url: `/uploads/${fileName}`,
-    type: part.mimetype.startsWith("video/") ? "video" : "image",
-    mimeType: part.mimetype,
-    originalName: part.filename || fileName
-  };
-
-  session.media = media;
-  session.updatedAt = Date.now();
-  io.to(sessionId).emit("display:state", publicState(session));
-  return { ok: true, media };
 });
 
 await app.ready();
@@ -175,15 +78,33 @@ const io = globalThis.__smartDisplayIo || new SocketIOServer(app.server, {
 });
 globalThis.__smartDisplayIo = io;
 
+app.post("/api/upload", async (request, reply) => {
+  const sessionId = String(request.query?.session || "").trim();
+  if (!sessionId) return reply.code(400).send({ ok: false, error: "session é obrigatório." });
+  const session = sessions.get(sessionId);
+  if (!session) return reply.code(404).send({ ok: false, error: "Sessão não encontrada." });
+  const part = await request.file();
+  if (!part) return reply.code(400).send({ ok: false, error: "Nenhum arquivo enviado." });
+  const allowed = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm"]);
+  if (!allowed.has(part.mimetype)) return reply.code(415).send({ ok: false, error: "Formato não suportado. Use JPG, PNG, WEBP, GIF, MP4 ou WEBM." });
+  const extFromName = path.extname(part.filename || "").toLowerCase();
+  const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif", ".mp4", ".webm"].includes(extFromName) ? extFromName : part.mimetype.startsWith("video/") ? ".mp4" : ".jpg";
+  const fileName = `${Date.now()}-${nanoid(10)}${safeExt}`;
+  const destination = path.join(uploadsDir, fileName);
+  await pipeline(part.file, fs.createWriteStream(destination));
+  const media = { url: `/uploads/${fileName}`, type: part.mimetype.startsWith("video/") ? "video" : "image", mimeType: part.mimetype, originalName: part.filename || fileName };
+  session.media = media;
+  session.updatedAt = Date.now();
+  io.to(sessionId).emit("display:state", publicState(session));
+  return { ok: true, media };
+});
+
 if (!io.__smartDisplayHandlersBound) {
   io.__smartDisplayHandlersBound = true;
   io.on("connection", (socket) => {
-    app.log.info({ socketId: socket.id }, "Socket conectado");
-
     socket.on("tv:create-session", async (_payload, ack = () => {}) => {
       let sessionId = nanoid(12);
       while (sessions.has(sessionId)) sessionId = nanoid(12);
-
       const session = makeSession(sessionId);
       session.tvSocketId = socket.id;
       session.connected.tv = true;
@@ -191,7 +112,6 @@ if (!io.__smartDisplayHandlersBound) {
       socket.join(sessionId);
       socket.data.sessionId = sessionId;
       socket.data.role = "tv";
-
       try {
         const proto = socket.handshake.headers["x-forwarded-proto"] || "https";
         const host = socket.handshake.headers["x-forwarded-host"] || socket.handshake.headers.host;
@@ -236,9 +156,7 @@ if (!io.__smartDisplayHandlersBound) {
     socket.on("controller:update-display", (payload = {}, ack = () => {}) => {
       const sessionId = socket.data.sessionId;
       const session = sessions.get(sessionId);
-      if (!session || socket.data.role !== "controller" || !isSessionMember(session, socket.id)) {
-        return ack({ ok: false, error: "Controle não autorizado nesta sessão." });
-      }
+      if (!session || socket.data.role !== "controller" || !isSessionMember(session, socket.id)) return ack({ ok: false, error: "Controle não autorizado nesta sessão." });
       const allowedModes = new Set(["photo-motion", "video-overlay", "video-pure"]);
       const content = { ...session.content, ...(payload.content || {}) };
       session.mode = allowedModes.has(payload.mode) ? payload.mode : session.mode;
@@ -277,42 +195,23 @@ if (!io.__smartDisplayHandlersBound) {
       const role = socket.data.role;
       if (!sessionId || !sessions.has(sessionId)) return;
       const session = sessions.get(sessionId);
-      if (role === "tv" && session.tvSocketId === socket.id) {
-        session.tvSocketId = null;
-        session.connected.tv = false;
-      }
-      if (role === "controller" && session.controllerSocketId === socket.id) {
-        session.controllerSocketId = null;
-        session.connected.controller = false;
-      }
+      if (role === "tv" && session.tvSocketId === socket.id) { session.tvSocketId = null; session.connected.tv = false; }
+      if (role === "controller" && session.controllerSocketId === socket.id) { session.controllerSocketId = null; session.connected.controller = false; }
       session.updatedAt = Date.now();
       io.to(sessionId).emit("presence:update", publicState(session).connected);
     });
   });
 }
 
-if (!globalThis.__smartDisplayCleanupTimer) {
-  globalThis.__smartDisplayCleanupTimer = setInterval(() => {
-    const now = Date.now();
-    const maxIdleMs = 12 * 60 * 60 * 1000;
-    for (const [id, session] of sessions.entries()) {
-      if (!session.connected.tv && !session.connected.controller && now - session.updatedAt > maxIdleMs) sessions.delete(id);
-    }
-  }, 10 * 60 * 1000);
-  globalThis.__smartDisplayCleanupTimer.unref?.();
-}
-
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
 
-if (!isVercel) {
-  try {
-    await app.listen({ port: PORT, host: HOST });
-    app.log.info(`Smart Display Pro rodando em http://${HOST}:${PORT}`);
-  } catch (error) {
-    app.log.error(error);
-    process.exit(1);
-  }
+try {
+  await app.listen({ port: PORT, host: HOST });
+  app.log.info(`Smart Display Pro rodando em http://${HOST}:${PORT}`);
+} catch (error) {
+  app.log.error(error);
+  process.exit(1);
 }
 
 export default app;
