@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Smart Display Pro — TV</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.468.0"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" />
+
+  <style>
+    :root { --accent: #9cff00; --yellow: #ffd400; --red: #ff2340; --cyan: #24eaff; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #020202; }
+    body { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .tv-shell { width: 100vw; height: 100vh; position: relative; isolation: isolate; background: radial-gradient(circle at 80% 15%, rgba(255, 88, 0, .18), transparent 34%), radial-gradient(circle at 22% 83%, rgba(156, 255, 0, .08), transparent 28%), #030303; }
+    .media-stage { position: absolute; inset: 0; overflow: hidden; }
+    .media-blur { position: absolute; inset: -6%; width: 112%; height: 112%; object-fit: cover; filter: blur(52px) brightness(.45) saturate(1.3); transform: scale(1.08); opacity: 0; transition: opacity .6s ease; }
+    .media-main { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transition: opacity .55s ease; }
+    .media-main.cover { object-fit: cover; }
+    .active-media { opacity: 1 !important; }
+    .ken-burns { animation: kenburns 18s ease-in-out infinite alternate; transform-origin: 48% 52%; }
+    @keyframes kenburns { 0% { transform: scale(1.02) translate3d(-.4%, -.2%, 0); } 100% { transform: scale(1.12) translate3d(.9%, .5%, 0); } }
+    .visual-vignette { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0,0,0,.70) 0%, rgba(0,0,0,.16) 43%, rgba(0,0,0,.25) 100%), linear-gradient(0deg, rgba(0,0,0,.72) 0%, transparent 32%); pointer-events: none; }
+    .visual-grid { position: absolute; inset: 0; opacity: .10; background-image: linear-gradient(rgba(255,255,255,.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.08) 1px, transparent 1px); background-size: 72px 72px; mask-image: linear-gradient(90deg, rgba(0,0,0,.9), transparent 70%); pointer-events: none; }
+    .promo-layer { position: absolute; inset: 0; padding: clamp(30px, 5vw, 90px); display: flex; align-items: flex-end; justify-content: space-between; gap: 4vw; transition: opacity .4s ease, transform .4s ease; }
+    .promo-copy { max-width: min(58vw, 980px); padding-bottom: 2vh; }
+    .promo-title { font-size: clamp(52px, 7vw, 132px); line-height: .88; font-weight: 1000; text-transform: uppercase; letter-spacing: -.045em; text-wrap: balance; color: #fff; filter: drop-shadow(0 10px 20px rgba(0,0,0,.55)); }
+    .promo-subtitle { margin-top: 1.4rem; font-size: clamp(22px, 2.2vw, 38px); font-weight: 700; color: rgba(255,255,255,.84); max-width: 70ch; }
+    .badge { position: absolute; top: clamp(32px, 5vw, 76px); right: clamp(32px, 5vw, 86px); transform: rotate(-2.5deg); display: inline-flex; align-items: center; gap: .65rem; padding: .72rem 1.15rem; border: 3px solid rgba(255,255,255,.88); border-radius: 14px; background: linear-gradient(135deg, #ff112e, #ff7a00); box-shadow: 0 16px 50px rgba(255,45,0,.35), inset 0 -6px 0 rgba(0,0,0,.18); color: white; font-size: clamp(18px, 2vw, 36px); font-weight: 1000; text-transform: uppercase; overflow: hidden; }
+    .badge::after { content: ""; position: absolute; top: -40%; left: -35%; width: 26%; height: 180%; transform: rotate(16deg); background: rgba(255,255,255,.62); filter: blur(5px); animation: shimmer 2.7s ease-in-out infinite; }
+    @keyframes shimmer { 0% { left: -35%; opacity: 0; } 15% { opacity: 1; } 55%, 100% { left: 125%; opacity: 0; } }
+    .price-stack { min-width: min(32vw, 520px); text-align: right; align-self: flex-end; padding-bottom: 2vh; }
+    .old-price { color: rgba(255,255,255,.72); font-size: clamp(18px, 1.8vw, 30px); font-weight: 900; text-decoration: line-through; text-transform: uppercase; letter-spacing: .05em; }
+    .price-box { position: relative; display: inline-block; margin-top: .45rem; padding: clamp(16px, 1.7vw, 28px) clamp(22px, 2.4vw, 42px); border-radius: 22px; border: 4px solid var(--accent); background: rgba(0,0,0,.80); box-shadow: 0 0 0 3px rgba(0,0,0,.85), 0 0 30px color-mix(in srgb, var(--accent) 40%, transparent), inset 0 -12px 30px rgba(255,255,255,.04); transform: perspective(900px) rotateX(4deg) rotateY(-4deg); }
+    .price-box::before { content: "POR APENAS"; position: absolute; top: 9px; left: 20px; font-size: clamp(10px, .9vw, 15px); font-weight: 1000; letter-spacing: .16em; color: rgba(255,255,255,.78); }
+    .price { padding-top: .6rem; color: var(--accent); font-size: clamp(58px, 8vw, 150px); line-height: .85; font-weight: 1000; letter-spacing: -.06em; text-shadow: 0 5px 0 rgba(0,0,0,.55), 0 12px 26px color-mix(in srgb, var(--accent) 30%, transparent); }
+    .discount { display: inline-flex; margin-top: .8rem; padding: .4rem .85rem; border-radius: 8px; background: #ff1634; color: white; font-size: clamp(15px, 1.4vw, 24px); font-weight: 1000; text-transform: uppercase; box-shadow: 0 10px 24px rgba(255,0,45,.28); }
+    .pairing { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; padding: 4vw; background: radial-gradient(circle at 70% 35%, rgba(156,255,0,.10), transparent 24%), linear-gradient(120deg, #050505, #090909 55%, #020202); }
+    .pair-card { width: min(1180px, 92vw); display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6vw; }
+    .brand { display: flex; align-items: center; gap: 16px; font-size: clamp(26px, 3vw, 54px); font-weight: 900; letter-spacing: -.03em; }
+    .brand-mark { width: clamp(52px, 5vw, 82px); aspect-ratio: 1; border-radius: 24%; border: 2px solid rgba(255,255,255,.92); display: grid; place-items: center; box-shadow: inset 0 0 30px rgba(255,255,255,.05); }
+    .pair-title { margin-top: 7vh; color: var(--yellow); font-size: clamp(30px, 3.6vw, 64px); font-weight: 1000; letter-spacing: -.04em; }
+    .pair-copy { margin-top: 1rem; max-width: 760px; color: rgba(255,255,255,.72); font-size: clamp(20px, 1.75vw, 31px); line-height: 1.35; }
+    .qr-wrap { padding: 22px; border-radius: 30px; background: white; box-shadow: 0 20px 80px rgba(0,0,0,.55); }
+    .qr-wrap img { width: min(32vw, 390px); display: block; }
+    .session-id { margin-top: 1.2rem; color: var(--yellow); font-size: clamp(20px, 2vw, 34px); font-weight: 950; letter-spacing: .08em; text-align: center; }
+    .status-dot { width: 12px; height: 12px; border-radius: 999px; background: #65ff72; box-shadow: 0 0 18px #65ff72; }
+    .connection-pill { position: absolute; z-index: 20; top: 24px; left: 24px; display: none; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 999px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(16px); color: white; font-size: 14px; font-weight: 800; }
+    .flash { position: absolute; inset: 0; z-index: 50; pointer-events: none; background: white; opacity: 0; }
+    .flash.active { animation: flash .4s ease; }
+    @keyframes flash { 0% { opacity: 0; } 35% { opacity: .32; } 100% { opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; } }
+  </style>
+</head>
+<body>
+  <main class="tv-shell">
+    <section class="media-stage" aria-label="Conteúdo exibido">
+      <img id="blurImage" class="media-blur" alt="" />
+      <img id="mainImage" class="media-main" alt="Mídia promocional" />
+      <video id="mainVideo" class="media-main" autoplay muted loop playsinline></video>
+      <div id="commercialFx" class="visual-vignette"></div>
+      <div id="gridFx" class="visual-grid"></div>
+      <div id="promoLayer" class="promo-layer">
+        <div id="badge" class="badge animate__animated"><i data-lucide="zap"></i><span id="badgeText">OFERTA IMPERDÍVEL</span></div>
+        <div class="promo-copy"><h1 id="title" class="promo-title animate__animated">SMART DISPLAY PRO</h1><p id="subtitle" class="promo-subtitle animate__animated">Envie uma mídia pelo celular e transforme esta tela em uma vitrine de alto impacto.</p></div>
+        <div class="price-stack animate__animated" id="priceStack"><div id="oldPrice" class="old-price"></div><div class="price-box"><div id="price" class="price">R$ 0,00</div></div><div id="discount" class="discount">DESCONTO EXCLUSIVO</div></div>
+      </div>
+    </section>
+    <div id="connectionPill" class="connection-pill"><span class="status-dot"></span><span>Controle conectado</span></div>
+    <section id="pairing" class="pairing"><div class="pair-card"><div><div class="brand"><div class="brand-mark"><i data-lucide="monitor-play"></i></div><span>Smart Display Pro</span></div><div class="pair-title">Conecte o celular e comece em segundos.</div><p class="pair-copy">Escaneie o QR Code com a câmera do smartphone. O navegador vira o controle remoto da TV em tempo real — sem instalar aplicativo.</p></div><div><div class="qr-wrap animate__animated animate__fadeIn"><img id="qrCode" alt="QR Code de conexão" /></div><div id="sessionId" class="session-id">GERANDO...</div></div></div></section>
+    <div id="flash" class="flash"></div>
+  </main>
+  <script>
+    const socket = io();
+    const pairing = document.getElementById("pairing");
+    const qrCode = document.getElementById("qrCode");
+    const sessionIdEl = document.getElementById("sessionId");
+    const connectionPill = document.getElementById("connectionPill");
+    const mainImage = document.getElementById("mainImage");
+    const blurImage = document.getElementById("blurImage");
+    const mainVideo = document.getElementById("mainVideo");
+    const promoLayer = document.getElementById("promoLayer");
+    const commercialFx = document.getElementById("commercialFx");
+    const gridFx = document.getElementById("gridFx");
+    const titleEl = document.getElementById("title");
+    const subtitleEl = document.getElementById("subtitle");
+    const priceEl = document.getElementById("price");
+    const oldPriceEl = document.getElementById("oldPrice");
+    const badgeTextEl = document.getElementById("badgeText");
+    const badgeEl = document.getElementById("badge");
+    const discountEl = document.getElementById("discount");
+    const priceStack = document.getElementById("priceStack");
+    let currentSessionId = sessionStorage.getItem("smartDisplaySession") || "";
+    let everPaired = false;
+    const connectionText = connectionPill.querySelector("span:last-child");
+    const accentMap = { lime: "#9cff00", yellow: "#ffd400", red: "#ff2340", cyan: "#24eaff" };
+    function restartAnimation(element, animationName) { element.classList.remove("animate__fadeInUp", "animate__zoomIn", "animate__fadeInRight"); void element.offsetWidth; element.classList.add(animationName); }
+    function setAccent(name = "lime") { document.documentElement.style.setProperty("--accent", accentMap[name] || accentMap.lime); }
+    function clearMediaClasses() { [mainImage, blurImage, mainVideo].forEach(el => el.classList.remove("active-media", "cover", "ken-burns")); }
+    function render(state) {
+      const mode = state.mode || "photo-motion"; const media = state.media; const content = state.content || {}; setAccent(content.accent);
+      titleEl.textContent = content.title || "OFERTA EM DESTAQUE"; subtitleEl.textContent = content.subtitle || ""; priceEl.textContent = content.price || "R$ 0,00"; oldPriceEl.textContent = content.oldPrice ? `DE ${content.oldPrice}` : ""; badgeTextEl.textContent = content.badge || "OFERTA IMPERDÍVEL"; discountEl.textContent = content.discount || "DESCONTO EXCLUSIVO";
+      restartAnimation(titleEl, "animate__fadeInUp"); restartAnimation(subtitleEl, "animate__fadeInUp"); restartAnimation(badgeEl, "animate__zoomIn"); restartAnimation(priceStack, "animate__fadeInRight"); clearMediaClasses();
+      const pure = mode === "video-pure"; promoLayer.style.opacity = pure ? "0" : "1"; promoLayer.style.pointerEvents = pure ? "none" : "auto"; commercialFx.style.opacity = pure ? "0" : "1"; gridFx.style.opacity = pure ? "0" : ".10";
+      if (!media) { mainVideo.pause(); mainVideo.removeAttribute("src"); mainVideo.load(); mainImage.removeAttribute("src"); blurImage.removeAttribute("src"); return; }
+      if (media.type === "image") { mainVideo.pause(); mainVideo.removeAttribute("src"); mainVideo.load(); mainImage.src = media.url; blurImage.src = media.url; mainImage.classList.add("active-media"); blurImage.classList.add("active-media"); if (mode === "photo-motion") mainImage.classList.add("ken-burns"); }
+      else { mainImage.removeAttribute("src"); blurImage.removeAttribute("src"); if (mainVideo.getAttribute("src") !== media.url) { mainVideo.src = media.url; mainVideo.load(); } mainVideo.classList.add("active-media", "cover"); mainVideo.muted = true; mainVideo.loop = true; mainVideo.playsInline = true; mainVideo.play().catch(() => {}); }
+    }
+    function setPresence(presence) { const controllerConnected = Boolean(presence?.controller); if (controllerConnected) everPaired = true; pairing.style.display = (!controllerConnected && !everPaired) ? "grid" : "none"; connectionPill.style.display = everPaired ? "flex" : "none"; if (connectionText) connectionText.textContent = controllerConnected ? "Controle conectado" : "Controle desconectado"; connectionPill.style.opacity = controllerConnected ? "1" : ".72"; }
+    function createSession() { socket.emit("tv:create-session", {}, response => { if (!response?.ok) { sessionIdEl.textContent = "ERRO AO GERAR"; return; } currentSessionId = response.sessionId; sessionStorage.setItem("smartDisplaySession", currentSessionId); qrCode.src = response.qrDataUrl; sessionIdEl.textContent = currentSessionId.toUpperCase(); render(response.state); setPresence(response.state.connected); }); }
+    function resumeSession() { if (!currentSessionId) return createSession(); socket.emit("tv:resume-session", { sessionId: currentSessionId }, response => { if (!response?.ok) { sessionStorage.removeItem("smartDisplaySession"); currentSessionId = ""; createSession(); return; } fetch(`/api/session/${encodeURIComponent(currentSessionId)}/qr`).then(r => r.json()).then(qr => { if (qr.ok) qrCode.src = qr.qrDataUrl; }); sessionIdEl.textContent = currentSessionId.toUpperCase(); render(response.state); setPresence(response.state.connected); }); }
+    socket.on("connect", resumeSession); socket.on("display:state", render); socket.on("presence:update", setPresence); socket.on("tv:flash", () => { const flash = document.getElementById("flash"); flash.classList.remove("active"); void flash.offsetWidth; flash.classList.add("active"); }); socket.on("disconnect", () => { if (everPaired) { connectionPill.style.display = "flex"; if (connectionText) connectionText.textContent = "Reconectando..."; connectionPill.style.opacity = ".72"; } });
+    lucide.createIcons();
+  </script>
+</body>
+</html>
