@@ -1,16 +1,20 @@
 # Smart Display Pro
 
-Sistema de sinalização digital para TV com controle remoto via smartphone.
+Sistema de sinalização digital para TV com controle remoto pelo smartphone.
 
-## Rodar localmente
+## Como funciona
 
-```bash
-npm install
-npm run dev
-```
+1. Abra `/tv.html` na TV.
+2. Escaneie o QR Code com o celular.
+3. O celular abre `/control.html?session=...`.
+4. Envie imagem ou vídeo, escolha o modo e atualize a TV em tempo real.
 
-Abra `http://localhost:3000/tv.html` na TV e escaneie o QR Code com o celular.
+## Modos
+
+- Foto + movimento (Ken Burns + oferta)
+- Vídeo + oferta
+- Vídeo puro em tela cheia
 
 ## Produção
 
-Use Node.js 20+ e um host com processo persistente e suporte a WebSocket. O servidor escuta em `0.0.0.0` e usa `PORT` do ambiente.
+O projeto usa Fastify + Socket.IO e precisa de processo Node persistente com suporte a WebSocket. O arquivo `render.yaml` provisiona o serviço no Render com health check e disco persistente para uploads.
